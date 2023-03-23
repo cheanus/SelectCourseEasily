@@ -5,11 +5,26 @@ import json
 import email
 import os
 import requests
+import hashlib
 from lxml import etree
 import numpy as np
 import pandas as pd
 import gurobipy as gp
 from gurobipy import GRB
+
+
+def get_color_code(text):
+    ## 返回字符串映射的一个浅色颜色代码
+    if text == '':
+        return None
+    else:
+        # 使用MD5散列函数对文本进行哈希处理，获取唯一的16进制值
+        hashed_text = hashlib.md5(text.encode()).hexdigest()
+        # 将16进制值转换为10进制数，作为颜色值
+        color_value = int(hashed_text, 16)
+        # 将颜色值映射到浅色范围（0-16777215），并将其转换为16进制颜色代码
+        color_code = "#{:06x}".format(color_value % 16777215)
+        return f'background-color: {color_code}'
 
 
 class Nwpu:
@@ -369,6 +384,7 @@ class Nwpu:
                 week_schedule_df.iloc[j, i] += self.short_word(course_table.name[n], limit=limit, is_show_end=is_show_end)
          
         week_schedule_df.set_axis(np.arange(1, 14), axis=0)
+        week_schedule_df = week_schedule_df.style.applymap(get_color_code)
         
         return course_table, week_schedule_df
     
