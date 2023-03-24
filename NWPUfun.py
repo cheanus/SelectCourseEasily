@@ -20,10 +20,8 @@ def get_color_code(text):
     else:
         # 使用MD5散列函数对文本进行哈希处理，获取唯一的16进制值
         hashed_text = hashlib.md5(text.encode()).hexdigest()
-        # 将16进制值转换为10进制数，作为颜色值
-        color_value = int(hashed_text, 16)
-        # 将颜色值映射到浅色范围（0-16777215），并将其转换为16进制颜色代码
-        color_code = "#{:06x}".format(color_value % 16777215)
+        red, green, blue = int(hashed_text[:2], 16), int(hashed_text[2:4], 16), int(hashed_text[4:6], 16)
+        color_code = "#{:02x}{:02x}{:02x}".format(red%106+150, green%106+150, blue%106+105)
         return f'background-color: {color_code}'
 
 
@@ -219,7 +217,7 @@ class Nwpu:
         course_data_filter = set()
         for class_ in course_data:
             if self.is_class_accept(str(class_['id'])):
-                course_data_filter.add(class_['scheduleText']['dateTimeText']['textZh'])
+                course_data_filter.add(class_['scheduleText']['dateTimePlacePersonText']['textZh'])
 
         return name, tuple(course_data_filter)
 
@@ -262,6 +260,7 @@ class Nwpu:
         section = text.split('; \n')
         schedule = np.zeros((16, 7, 13), dtype=np.bool_)
         for s in section:
+            # print(s)
             # 注意这里的week，教学周是从第3周才开课的，array里都是从0开始算
             text_re1 = re.findall(r'^(.*?)周', s)[0].split(',')
             text_re2 = re.findall(r'周 周(.*?) 第(.*?)节(?:（中午）)?~第(.*?)节(?:（中午）)?', s)[0]
