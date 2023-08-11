@@ -66,14 +66,12 @@ class Nwpu:
     
     def set_semester(self, text):
         # 将诸如“2022-2023春”的文字转化为学期代码
-        semester = int(text[:4]) - 1842
-        if text[-1] == '春':
-            semester += 1
-        elif text[-1] == '夏':
-            raise Exception('不支持夏季选课排表')
-        elif text[-1] != '秋':
+        response = self.session.get('https://jwxt.nwpu.edu.cn/student/for-std/lesson-search', headers=self.headers)
+        semester = re.findall(r'value="(.*?)">'+text+r'</option>', response.text)
+        if len(semester) == 0:
             raise Exception('学期输入格式错误')
-        self.semester = str(semester)
+        else:
+            self.semester = str(semester[0])
     
     
     def login_nwpu(self):
