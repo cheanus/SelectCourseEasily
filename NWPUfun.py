@@ -62,6 +62,7 @@ class Nwpu:
     headers2['Accept'] = 'application/json, text/javascript, */*; q=0.01'
     code_all = pd.Series([], dtype='object')
     solution_num = None
+    data_all = None
     
     
     def set_semester(self, text):
@@ -299,10 +300,12 @@ class Nwpu:
 
     def collect_data(self):
         # 根据self.code_all，收集所选课程的所有排课信息
-        self.data_all = pd.DataFrame(columns=('code', 'name', 'No.', 'text'))
-        self.schedule_data_all = []
-        for n, code in enumerate(self.code_all):
-            print(f'正在提取{code}信息...({n+1}/{len(self.code_all)})', end='')
+        if self.data_all is None:
+            self.data_all = pd.DataFrame(columns=('code', 'name', 'No.', 'text'))
+            self.schedule_data_all = []
+        code_all_add = self.code_all[~self.code_all.isin(self.data_all.code)]
+        for n, code in enumerate(code_all_add):
+            print(f'正在提取{code}信息...({n+1}/{len(code_all_add)})', end='')
             name, texts = self.class_schedule(code)
             for i, s in enumerate(texts):
                 self.data_all = pd.concat([self.data_all, pd.DataFrame([[code, name, i, s]], columns=('code', 'name', 'No.', 'text'))])
