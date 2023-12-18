@@ -193,13 +193,15 @@ class Nwpu:
 
     def class_schedule(self, course_code):
         # 输出示例：
-        # (毛泽东思想和中国特色社会主义理论体系概论，
-        # {'3~13周 周一 第七节~第八节; \n3~12周 周三 第七节~第八节',
-        #  '3~13周 周一 第九节~第十节; \n3~12周 周三 第九节~第十节',
-        #  '3~13周 周二 第一节~第二节; \n3~12周 周四 第一节~第二节',
-        #  '3~13周 周二 第七节~第八节; \n3~12周 周四 第七节~第八节',
-        #  '3~13周 周二 第三节~第四节; \n3~12周 周四 第三节~第四节',
-        #  '3~13周 周二 第九节~第十节; \n3~12周 周四 第九节~第十节'})
+        # (
+        #   毛泽东思想和中国特色社会主义理论体系概论，
+        #   (('U44G11026.01', '3~13周 周一 第七节~第八节; \n3~12周 周三 第七节~第八节'),
+        #    ('U44G11026.02', '3~13周 周一 第九节~第十节; \n3~12周 周三 第九节~第十节'),
+        #    ('U44G11026.03', '3~13周 周二 第一节~第二节; \n3~12周 周四 第一节~第二节'),
+        #    ('U44G11026.04', '3~13周 周二 第七节~第八节; \n3~12周 周四 第七节~第八节'),
+        #    ('U44G11026.05', '3~13周 周二 第三节~第四节; \n3~12周 周四 第三节~第四节'),
+        #    ('U44G11026.06', '3~13周 周二 第九节~第十节; \n3~12周 周四 第九节~第十节'))
+        #)
         url = 'https://jwxt.nwpu.edu.cn/student/for-std/lesson-search'
         response = self.session.get(url)
         identify_code = re.findall(r'index/(.*)', response.history[0].headers['Location'])[0]
@@ -216,7 +218,7 @@ class Nwpu:
         course_data_filter = set()
         for class_ in course_data:
             if self.is_class_accept(str(class_['id'])):
-                course_data_filter.add(class_['scheduleText']['dateTimePlacePersonText']['textZh'])
+                course_data_filter.add((class_['code'], class_['scheduleText']['dateTimePlacePersonText']['textZh']))
 
         return name, tuple(course_data_filter)
 
@@ -257,10 +259,9 @@ class Nwpu:
     def text2array(self, text):
         # 将排课信息的文字描述转为array矩阵
         section = text.split('; \n')
-        schedule = np.zeros((16, 7, 13), dtype=np.bool_)
+        schedule = np.zeros((18, 7, 13), dtype=np.bool_)
         for s in section:
             # print(s)
-            # 注意这里的week，教学周是从第3周才开课的，array里都是从0开始算
             text_re1 = re.findall(r'^(.*?)周', s)[0].split(',')
             text_re2 = re.findall(r'周 周(.*?) 第(.*?)节(?:（中午）)?~第(.*?)节(?:（中午）)?', s)[0]
             
@@ -268,11 +269,11 @@ class Nwpu:
             for x in text_re1:
                 if '~' in x:
                     week_start, week_end = re.findall(r'(.*)~(.*)', x)[0]
-                    week_start = int(week_start) - 3
-                    week_end = int(week_end) - 3
+                    week_start = int(week_start) - 1
+                    week_end = int(week_end) - 1
                     week.extend(list(range(week_start, week_end+1)))
                 else:
-                    week.append(int(x) - 3)
+                    week.append(int(x) - 1)
             day, class_start, class_end = text_re2
             
             day = self.chinese2number(day) - 1
@@ -307,23 +308,23 @@ class Nwpu:
         for n, code in enumerate(code_all_add):
             print(f'正在提取{code}信息...({n+1}/{len(code_all_add)})', end='')
             name, texts = self.class_schedule(code)
-            for i, s in enumerate(texts):
-                self.data_all = pd.concat([self.data_all, pd.DataFrame([[code, name, i, s]], columns=('code', 'name', 'No.', 'text'))])
+            for sub_code, s in texts:
+                self.data_all = pd.concat([self.data_all, pd.DataFrame([[code, name, sub_code, s]], columns=('code', 'name', 'No.', 'text'))])
                 self.schedule_data_all.append(self.text2array(s))
             print('完毕')
         self.data_all = self.data_all.reset_index(drop=True)
 
 
-    def part_course(self, code_consider=np.array([])):
+    def part_course(self, code_consider=[]):
         # 根据code_consider，过滤不符合条件的课程
         if len(code_consider) == 0:
-            code_consider = self.code_all.to_numpy()
-        self.data_consider = self.data_all[self.data_all['code'].isin(code_consider)]
+            code_consider = self.code_all.tolist()
+        self.is_consider = (self.data_all['code'].isin(code_consider) | self.data_all['No.'].isin(code_consider))
+        self.data_consider = self.data_all[self.is_consider]
         self.course_index = self.data_consider[['code', 'No.']]
 
-        self.is_consider = self.data_all.code.isin(code_consider)
         self.schedule_data_consider = np.array([self.schedule_data_all[i] for i in range(len(self.data_all)) if self.is_consider[i]])
-        self.code_consider = code_consider
+        self.code_consider = [re.findall('^(.*?)(\.\d\d)*$', str(x))[0][0] for x in code_consider]
         
         
     def gurobi_modeling(self):
@@ -335,15 +336,15 @@ class Nwpu:
             m.setParam(GRB.Param.PoolSolutions, self.solution_num)
             m.setParam(GRB.Param.PoolSearchMode, 2)
             
-        # index为索引，形式如(('U01M13001', '1'), ('U01M13001', '2'), ('U01M13002', '1'))
-        # 前者为课程代码，后者为用以区分有不同排课时间的各教学班
+        # index为索引，形式如(('U01M13001', 'U01M13001.01'), ('U01M13001', 'U01M13001.02'))
+        # 前者为课程代码，后者用以区分有不同排课时间的各教学班
         index = self.course_index.apply(lambda x: tuple(x), axis=1).values.tolist()
         # x是0-1决策变量，字典类型，键为index。1表示选上状态，0表示不选状态
         x = m.addVars(index, name='x', vtype=GRB.BINARY)
-        # self.schedule_data_consider是一个n*16*7*13的0-1常数矩阵（n=len(index)，16表示3-18教学周数，7表示星期数，13表示一天的节数）
+        # self.schedule_data_consider是一个n*18*7*13的0-1常数矩阵（n=len(index)，18表示1-18教学周数，7表示星期数，13表示一天的节数）
         # 1表示该课在该时间段上课，0表示该课在该时间段不上课
         # 基本约束
-        m.addConstrs((x.values() @ self.schedule_data_consider[:,i,j,k] <= 1 for i in range(16) for j in range(7) for k in range(13)))  # 同一个时间段最多上一节课
+        m.addConstrs((x.values() @ self.schedule_data_consider[:,i,j,k] <= 1 for i in range(18) for j in range(7) for k in range(13)))  # 同一个时间段最多上一节课
         m.addConstrs((x.sum(str(h), '*') == 1 for h in self.code_consider))  # 每个课程代码都要选一门课
 
         # 自定义规则示例
