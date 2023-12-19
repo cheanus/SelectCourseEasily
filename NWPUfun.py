@@ -63,6 +63,7 @@ class Nwpu:
     code_all = pd.Series([], dtype='object')
     solution_num = None
     data_all = None
+    all_class_allowed = False
     
     
     def set_semester(self, text):
@@ -177,6 +178,8 @@ class Nwpu:
 
 
     def is_class_accept(self, class_id):
+        if self.all_class_allowed:
+            return True
         # 查看自己是否符合某个课的选课组要求
         response = self.session.get('https://jwxt.nwpu.edu.cn/student/for-std-lessons/info/' + class_id, headers=self.headers)
         response.encoding = 'utf-8'
@@ -319,11 +322,11 @@ class Nwpu:
         # 根据code_consider，过滤不符合条件的课程
         if len(code_consider) == 0:
             code_consider = self.code_all.tolist()
-        self.is_consider = (self.data_all['code'].isin(code_consider) | self.data_all['No.'].isin(code_consider))
-        self.data_consider = self.data_all[self.is_consider]
+        is_consider = (self.data_all['code'].isin(code_consider) | self.data_all['No.'].isin(code_consider))
+        self.data_consider = self.data_all[is_consider]
         self.course_index = self.data_consider[['code', 'No.']]
 
-        self.schedule_data_consider = np.array([self.schedule_data_all[i] for i in range(len(self.data_all)) if self.is_consider[i]])
+        self.schedule_data_consider = np.array([self.schedule_data_all[i] for i in range(len(self.data_all)) if is_consider[i]])
         self.code_consider = [re.findall('^(.*?)(\.\d\d)*$', str(x))[0][0] for x in code_consider]
         
         
